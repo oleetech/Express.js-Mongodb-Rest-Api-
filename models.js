@@ -16,6 +16,7 @@ const bookSchema = new mongoose.Schema({
     ref: 'Author',
   },
   genre: String,
+  quantity: { type: Number, default: 0 }, // Inventory quantity field
 });
 
 const Book = mongoose.model('Book', bookSchema);
@@ -30,4 +31,28 @@ const memberSchema = new mongoose.Schema({
   
   const Member = mongoose.model('Member', memberSchema );
 
-module.exports = { Author, Book ,Member};
+
+// Define the schema for book loans
+const loanSchema = new mongoose.Schema({
+    book: { type: mongoose.Schema.Types.ObjectId, ref: 'Book', required: true },
+    member: { type: mongoose.Schema.Types.ObjectId, ref: 'Member', required: true },
+    issueDate: { type: Date, default: Date.now },
+    dueDate: { type: Date, required: true },
+    returnDate: { type: Date },
+  });
+  
+const Loan = mongoose.model('Loan', loanSchema );  
+
+const stockbookSchema = new mongoose.Schema({
+    book: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Book',
+      required: true,
+    },
+    quantity: { type: Number, required: true },
+    dateAdded: { type: Date, default: Date.now },
+  });
+  
+  const Stockbook = mongoose.model('Stockbook', stockbookSchema);
+
+module.exports = { Author, Book ,Member,Loan,Stockbook};

@@ -1,7 +1,7 @@
 // routes.js
 const express = require('express');
 const router = express.Router();
-const { Author, Book,Member } = require('./models');
+const { Author, Book,Member,Loan,Stockbook } = require('./models');
 
 // Define your CRUD routes here
 
@@ -45,7 +45,30 @@ router.get('/authors/:id', async (req, res) => {
     }
   });
 
+// Advanced Search
+router.get('/advanced-search', async (req, res) => {
+    try {
+      const title = req.query.title; // Get the title from the query parameter
+      const author = req.query.author; // Get the author from the query parameter
+      const genre = req.query.genre; // Get the genre from the query parameter
   
+      // Implement your advanced search logic here based on the query parameters
+      // Example: Search books by title, author, and genre
+      const query = {};
+  
+      if (title) query.title = new RegExp(title, 'i');
+      if (author) query.author = new RegExp(author, 'i');
+      if (genre) query.genre = new RegExp(genre, 'i');
+  
+      const results = await Book.find(query);
+  
+      res.json(results);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Advanced search failed' });
+    }
+  });
+
 // Insert multiple authors
 router.post('/multiple-authors', async (req, res) => {
     try {
@@ -388,6 +411,109 @@ router.post('/members', async (req, res) => {
     }
   });
   
+
   
+// Create a new loan
+router.post('/loans', async (req, res) => {
+    try {
+      const { book, member, dueDate } = req.body;
+      const newLoan = new Loan({ book, member, dueDate });
+      const savedLoan = await newLoan.save();
+      res.json(savedLoan);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to create loan' });
+    }
+  });
+  
+  // Get all loans
+  router.get('/loans', async (req, res) => {
+    try {
+      const loans = await Loan.find();
+      res.json(loans);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to retrieve loans' });
+    }
+  });
+  
+  // Get a loan by ID
+  router.get('/loans/:id', async (req, res) => {
+    try {
+      const loanId = req.params.id;
+      const loan = await Loan.findById(loanId);
+  
+      if (!loan) {
+        return res.status(404).json({ error: 'Loan not found' });
+      }
+  
+      res.json(loan);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to find loan' });
+    }
+  });
+  
+  // Update a loan by ID
+  router.put('/loans/:id', async (req, res) => {
+    try {
+      const loanId = req.params.id;
+      const { book, member, dueDate, returnDate } = req.body;
+  
+      const updatedLoan = await Loan.findByIdAndUpdate(
+        loanId,
+        { book, member, dueDate, returnDate },
+        { new: true }
+      );
+  
+      if (!updatedLoan) {
+        return res.status(404).json({ error: 'Loan not found' });
+      }
+  
+      res.json(updatedLoan);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to update loan' });
+    }
+  });
+  
+  // Delete a loan by ID
+  router.delete('/loans/:id', async (req, res) => {
+    try {
+      const loanId = req.params.id;
+  
+      const deletedLoan = await Loan.findByIdAndDelete(loanId);
+  
+      if (!deletedLoan) {
+        return res.status(404).json({ error: 'Loan not found' });
+      }
+  
+      res.json({ message: 'Loan deleted successfully' });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to delete loan' });
+    }
+  });
+
+  
+
+// Save a stockbook entry
+router.post('/add-stockbook', async (req, res) => {
+    try {
+      const { book, quantity } = req.body;
+  
+      // Create a stockbook entry
+      const stockbookEntry = new Stockbook({ book: book, quantity });
+      await stockbookEntry.save();
+  
+      // Update the book's quantity
+      await Book.findByIdAndUpdate(book, { $inc: { quantity } });
+  
+      res.json(stockbookEntry);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to save stockbook entry' });
+    }
+  });
   
 module.exports = router;
