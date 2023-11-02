@@ -55,4 +55,38 @@ const stockbookSchema = new mongoose.Schema({
   
   const Stockbook = mongoose.model('Stockbook', stockbookSchema);
 
-module.exports = { Author, Book ,Member,Loan,Stockbook};
+
+  const reservationSchema = new mongoose.Schema({
+    book: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Book',
+      required: true,
+    },
+    member: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Member',
+      required: true,
+    },
+    reservationDate: {
+      type: Date,
+      default: Date.now,
+    },
+    status: {
+      type: String,
+      default: 'pending',
+    },
+  });
+  
+  const Reservation = mongoose.model('Reservation', reservationSchema);
+
+
+
+  const userSchema = new mongoose.Schema({
+    username: String,
+    email: String,
+    password: String,
+  });
+  
+  const User = mongoose.model('User', userSchema);
+
+module.exports = { Author, Book ,Member,Loan,Stockbook,Reservation,User};

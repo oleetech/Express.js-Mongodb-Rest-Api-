@@ -1,7 +1,12 @@
 // routes.js
 const express = require('express');
 const router = express.Router();
-const { Author, Book,Member,Loan,Stockbook } = require('./models');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { Author, Book,Member,Loan,Stockbook,Reservation,User } = require('./models');
+
+
+const {verifyToken,isAdmin,isLibrarian,isMember} = require('./middleware');
 
 // Define your CRUD routes here
 
@@ -414,15 +419,42 @@ router.post('/members', async (req, res) => {
 
   
 // Create a new loan
+// Loan a book to a member
 router.post('/loans', async (req, res) => {
     try {
-      const { book, member, dueDate } = req.body;
-      const newLoan = new Loan({ book, member, dueDate });
-      const savedLoan = await newLoan.save();
-      res.json(savedLoan);
+      const { bookId, memberId, dueDate } = req.body;
+  
+      // Decrement the book's quantity in the inventory
+      await Book.findByIdAndUpdate(bookId, { $inc: { quantity: -1 } });
+  
+      // Create a loan record
+      const loan = new Loan({ book: bookId, member: memberId, dueDate });
+      await loan.save();
+  
+      res.json(loan);
     } catch (err) {
       console.error(err);
-      res.status(500).json({ error: 'Failed to create loan' });
+      res.status(500).json({ error: 'Failed to loan the book' });
+    }
+  });
+
+  // Receive a returned book
+router.put('/receive-book/:loanId', async (req, res) => {
+    try {
+      const loanId = req.params.loanId;
+  
+      // Increment the book's quantity in the inventory
+      const loan = await Loan.findById(loanId);
+      await Book.findByIdAndUpdate(loan.book, { $inc: { quantity: 1 } });
+  
+      // Update the loan record with the return date
+      const returnDate = new Date();
+      await Loan.findByIdAndUpdate(loanId, { returnDate });
+  
+      res.json({ message: 'Book received and loan record updated' });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to receive the book' });
     }
   });
   
@@ -516,4 +548,193 @@ router.post('/add-stockbook', async (req, res) => {
     }
   });
   
+
+// Create a new reservation
+router.post('/reservations', async (req, res) => {
+  try {
+    const { book, member, reservationDate, status } = req.body;
+    const reservation = new Reservation({ book, member, reservationDate, status });
+    const savedReservation = await reservation.save();
+    res.json(savedReservation);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create reservation' });
+  }
+});
+
+// Get all reservations
+router.get('/reservations', async (req, res) => {
+  try {
+    const reservations = await Reservation.find();
+    res.json(reservations);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to retrieve reservations' });
+  }
+});
+
+
+// Get a reservation by ID
+router.get('/reservations/:id', async (req, res) => {
+  try {
+    const reservationId = req.params.id;
+    const reservation = await Reservation.findById(reservationId);
+
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    res.json(reservation);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to find reservation' });
+  }
+});
+
+// Update a reservation by ID
+router.put('/reservations/:id', async (req, res) => {
+  try {
+    const reservationId = req.params.id;
+    const { status } = req.body;
+
+    const updatedReservation = await Reservation.findByIdAndUpdate(
+      reservationId,
+      { status },
+      { new: true }
+    );
+
+    if (!updatedReservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    res.json(updatedReservation);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update reservation' });
+  }
+});
+
+// Delete a reservation by ID
+router.delete('/reservations/:id', async (req, res) => {
+  try {
+    const reservationId = req.params.id;
+
+    const deletedReservation = await Reservation.findByIdAndDelete(reservationId);
+
+    if (!deletedReservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    res.json({ message: 'Reservation canceled successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to cancel reservation' });
+  }
+});  
+
+// Registration route
+router.post('/register', async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+    
+    // Check if the user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Hash the password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create a new user
+    const user = new User({
+      username,
+      email,
+      password: hashedPassword,
+    });
+
+    // Save the user to the database
+    await user.save();
+
+    // Create and send a JWT
+    const token = jwt.sign({ _id: user._id }, '123456789');
+    res.header('auth-token', token).json({ token });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+
+// Login route
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Check if the user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ message: 'User not found' });
+    }
+
+    // Check the password
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return res.status(400).json({ message: 'Invalid password' });
+    }
+
+    // Create and send a JWT
+    const token = jwt.sign({ _id: user._id }, '123456789');
+    res.header('auth-token', token).json({ token });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get('/api/protected', verifyToken, (req, res) => {
+  res.json({ message: 'This is a protected route.' });
+});
+
+// Example protected routes with role-based access control
+router.get('/api/admin', verifyToken, isAdmin, (req, res) => {
+  res.json({ message: 'This is an admin-only route.' });
+});
+
+router.get('/api/librarian', verifyToken, isLibrarian, (req, res) => {
+  res.json({ message: 'This is a librarian or admin route.' });
+});
+
+router.get('/api/member', verifyToken, isMember, (req, res) => {
+  res.json({ message: 'This is a member, librarian, or admin route.' });
+});
+
+
+
+// Update user profile
+router.put('/profile-update', verifyToken, async (req, res) => {
+  try {
+    // Get the user ID from the token
+    const userId = req.user._id;
+
+    // Retrieve the user from the database
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update user profile fields
+    user.username = req.body.username || user.username;
+    user.email = req.body.email || user.email;
+    // Add additional fields for preferences or contact information
+
+    // Save the updated user profile
+    await user.save();
+
+    res.json({ message: 'Profile updated successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;
